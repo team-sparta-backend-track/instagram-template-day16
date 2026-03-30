@@ -7,6 +7,7 @@ import com.querydsl.core.Tuple;
 import com.querydsl.core.types.Expression;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.JPAExpressions;
+import com.querydsl.jpa.JPQLQuery;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
@@ -38,6 +39,7 @@ import static com.example.instagramclone.domain.comment.domain.QComment.comment;
 public class PostRepositoryCustomImpl implements PostRepositoryCustom {
 
     private final JPAQueryFactory queryFactory;
+    private final PostGridQueryHelper postGridQueryHelper;
 
 
     /**
@@ -46,117 +48,12 @@ public class PostRepositoryCustomImpl implements PostRepositoryCustom {
      */
     @Override
     public Slice<ProfilePostResponse> findAllByWriterId(Long writerId, Pageable pageable) {
-        /*
-         * Native SQL(동등 로직) - 극단적 1쿼리(one query)
-         *
-         * 개념상 select 절에 상관 서브쿼리 3개를 같이 올립니다.
-         * - thumbnail_url: img_order = 1 이미지 1건 (없으면 null)
-         * - multiple_images: img_order > 1 존재 여부
-         * - comment_count: 원댓글(parent_id is null) 개수
-         *
-         SELECT
-             p.id,
-             p.content,
-             p.member_id,
-             (SELECT pi.image_url
-                  FROM post_images pi
-                  WHERE pi.post_id = p.id
-                    AND pi.img_order = 1
-                  LIMIT 1) AS thumbnail_url,
-
-              EXISTS(
-                  SELECT 1
-                   FROM post_images pi2
-                   WHERE pi2.post_id = p.id
-                     AND pi2.img_order > 1
-                ) AS multiple_images,
-
-               (SELECT COUNT(c.id)
-                   FROM comments c
-                  WHERE c.post_id = p.id
-                    AND c.parent_id IS NULL) AS comment_count,
-
-              p.like_count
-          FROM posts p
-          WHERE p.member_id = 1
-          ORDER BY p.id DESC
-          LIMIT 5
-          OFFSET 0;
-
-         * - 이 쿼리는 limit(pageSize + 1)로 hasNext를 판단한 뒤 마지막 row를 제거합니다.
-         */
-        // 1) imgOrder=1 썸네일(imageUrl) + imgOrder>1 존재 여부로 multipleImages 계산
-        QPostImage pi = QPostImage.postImage;
-
-        Expression<String> thumbnailExpr = JPAExpressions
-                .select(pi.imageUrl)
-                .from(pi)
-                .where(
-                        pi.post.id.eq(post.id),
-                        pi.imgOrder.eq(1)
-                )
-                .limit(1);
-
-        BooleanExpression multipleImagesExpr = JPAExpressions
-                .selectOne()
-                .from(pi)
-                .where(
-                        pi.post.id.eq(post.id),
-                        pi.imgOrder.gt(1)
-                )
-                .exists();
-
-        // 2) 댓글 수도 같은 SELECT에 넣기 (원댓글 only, parent is null)
-        Expression<Long> commentCountExpr = JPAExpressions
-                .select(comment.id.count())
-                .from(comment)
-                .where(
-                        comment.post.id.eq(post.id),
-                        comment.parent.isNull()
-                );
-
-        // 3) 타겟 유저 게시물 + 썸네일/다중 여부/댓글 수를 한 번에 조회
-        // limit + 1로 Slice hasNext 판별
-        List<Tuple> tuples = queryFactory
-                .select(post, thumbnailExpr, multipleImagesExpr, commentCountExpr)
-                .from(post)
+        JPQLQuery<Post> baseQuery = queryFactory
+                .selectFrom(post)
                 .where(post.writer.id.eq(writerId))
-                .orderBy(post.id.desc())
-                .offset(pageable.getOffset())
-                .limit(pageable.getPageSize() + 1L)
-                .fetch();
+                .orderBy(post.id.desc());
 
-        if (tuples.isEmpty()) {
-            return new SliceImpl<>(Collections.emptyList(), pageable, false);
-        }
-
-        boolean hasNext = tuples.size() > pageable.getPageSize();
-        if (hasNext) {
-            tuples = tuples.subList(0, pageable.getPageSize());
-        }
-
-        // 4) 최종 DTO 조립
-        List<ProfilePostResponse> content = tuples.stream()
-                .map(t -> {
-                    Post p = t.get(post);
-                    String thumbnailUrl = t.get(1, String.class);
-                    Boolean multipleImages = t.get(2, Boolean.class);
-                    Long commentCount = t.get(3, Long.class);
-
-                    long likeCount = p.getLikeCount(); // 비정규화 컬럼 그대로 사용
-                    long commentCountInt = commentCount != null ? commentCount : 0L;
-
-                    return new ProfilePostResponse(
-                            p.getId(),
-                            thumbnailUrl,
-                            Boolean.TRUE.equals(multipleImages),
-                            likeCount,
-                            commentCountInt
-                    );
-                })
-                .toList();
-
-        return new SliceImpl<>(content, pageable, hasNext);
+        return postGridQueryHelper.findProfilePostSlice(baseQuery, pageable);
     }
 
     /**

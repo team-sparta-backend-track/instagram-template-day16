@@ -4,6 +4,7 @@ import com.example.instagramclone.domain.comment.domain.Comment;
 import com.example.instagramclone.domain.comment.domain.CommentRepository;
 import com.example.instagramclone.domain.follow.domain.Follow;
 import com.example.instagramclone.domain.follow.domain.FollowRepository;
+import com.example.instagramclone.domain.hashtag.application.HashtagService;
 import com.example.instagramclone.domain.member.domain.Member;
 import com.example.instagramclone.domain.member.domain.MemberRepository;
 import com.example.instagramclone.domain.post.domain.Post;
@@ -46,6 +47,7 @@ public class TestDataInit implements ApplicationRunner {
     private final PostLikeRepository postLikeRepository;
     private final CommentRepository commentRepository;
     private final PasswordEncoder passwordEncoder;
+    private final HashtagService hashtagService;
 
     @Override
     @Transactional
@@ -72,12 +74,14 @@ public class TestDataInit implements ApplicationRunner {
             List<Post> savedPostsOfMember = new ArrayList<>();
 
             for (int p = 1; p <= 5; p++) {
+                String content = buildPostCaptionWithHashtags(seed, p);
                 Post post = Post.builder()
-                        .content(savedMember.getName() + "의 " + p + "번째 일상 피드입니다~! #테스트")
+                        .content(content)
                         .writer(savedMember)
                         .build();
                 Post savedPost = postRepository.save(post);
                 savedPostsOfMember.add(savedPost);
+                hashtagService.syncHashtagsForPost(savedPost.getId(), savedPost.getContent());
 
                 for (int img = 1; img <= 2; img++) {
                     PostImage postImage = PostImage.builder()
@@ -107,7 +111,37 @@ public class TestDataInit implements ApplicationRunner {
         // 댓글·대댓글 (Day 14 Step 3 API: 원댓글 목록 + replyCount) 테스트용
         seedCommentThreads(savedMembers, postsByMember);
 
-        System.out.println("테스트용 계정 5개, 팔로우, 좋아요, 댓글/대댓글 스레드, 피드 세팅 완료! (게시물 총 25개)");
+        System.out.println("테스트용 계정 5개, 팔로우, 좋아요, 댓글/대댓글, 해시태그 동기화, 피드 세팅 완료! (게시물 총 25개)");
+    }
+
+    /**
+     * 캡션에 서로 다른 해시태그 조합을 넣어 태그 피드·검색 데모가 되도록 합니다.
+     * 공통 태그(#일상 #데모 등)는 여러 글에 반복되어 태그별 게시물 수가 쌓입니다.
+     */
+    private static String buildPostCaptionWithHashtags(MemberSeed seed, int postNumber) {
+        String body = seed.name() + "의 " + postNumber + "번째 일상 피드입니다~!";
+        String sharedByPost = switch (postNumber) {
+            case 1 -> "#일상 #데모 #테스트";
+            case 2 -> "#맛집 #카페 #일상";
+            case 3 -> "#산책 #주말 #데일리";
+            case 4 -> "#OOTD #셀카 #피드";
+            case 5 -> "#친구 #추억 #일상";
+            default -> "#테스트";
+        };
+        String characterTags = characterHashtags(seed.username());
+        return body + " " + sharedByPost + " " + characterTags;
+    }
+
+    /** 캐릭터(회원)별로 한 번 더 구분되는 태그 — 태그 피드에서 작성자 성격이 드러나게 */
+    private static String characterHashtags(String username) {
+        return switch (username) {
+            case "kuromi" -> "#쿠로미 #보라매력";
+            case "mamel" -> "#마이멜로디 #핑크";
+            case "pikachu" -> "#피카츄 #전기충전금지";
+            case "kitty" -> "#키티 #리본";
+            case "heartping" -> "#하츄핑 #티니핑";
+            default -> "#sanrio";
+        };
     }
 
     private void seedFollowRelations(List<Member> members) {
@@ -203,7 +237,7 @@ public class TestDataInit implements ApplicationRunner {
         Member heartping = members.get(4);
 
         // --- 쿠로미(kuromi) 1번 게시글: 원댓·대댓 풍부 (네이티브 SQL GROUP BY parent_id 집계 예시용) ---
-        // 원댓 6개, 대댓 분포: 4 / 3 / 2 / 2 / 1 / 0 
+        // 원댓 6개, 대댓 분포: 4 / 3 / 2 / 2 / 1 / 0
         Post kuromiPost0 = postsByMember.get(0).get(0);
         Comment kR1 = commentRepository.save(Comment.create(kuromiPost0, mamel, "쿠로미도 오늘 너무 귀여워~", null));
         Comment kR2 = commentRepository.save(Comment.create(kuromiPost0, pikachu, "피카피카! 응원이야", null));
