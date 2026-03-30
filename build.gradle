@@ -1,0 +1,82 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.3.6'
+    id 'io.spring.dependency-management' version '1.1.6'
+}
+
+group = 'com.example'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+
+    implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
+
+    compileOnly 'org.projectlombok:lombok'
+    developmentOnly 'org.springframework.boot:spring-boot-devtools'
+    runtimeOnly 'org.mariadb.jdbc:mariadb-java-client'
+    // MapStruct: annotationProcessor 순서 중요 - mapstruct-processor 가 lombok 보다 먼저 와야 함
+    implementation 'org.mapstruct:mapstruct:1.6.3'
+    annotationProcessor 'org.mapstruct:mapstruct-processor:1.6.3'
+    annotationProcessor 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok-mapstruct-binding:0.2.0'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+
+    // Spring Security 관련 의존성
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+
+    // JWT 관련 의존성
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.7'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.7'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.7'
+
+    // spring jpa
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    // 쿼리파라미터 추가 외부로그 남기기
+    implementation 'com.github.gavlyukovskiy:p6spy-spring-boot-starter:1.9.0'
+
+    // QueryDSL 의존성 (OpenFeign fork - Hibernate 6 / Spring Boot 3.x 완전 호환)
+    // 원본 com.querydsl:5.0.0은 Hibernate 6에서 NoClassDefFoundError 발생 (사실상 유지보수 중단)
+    // io.github.openfeign.querydsl은 기존 API(com.querydsl.* 패키지명)를 유지하므로 코드 변경 불필요
+    implementation 'io.github.openfeign.querydsl:querydsl-jpa:6.10.1'
+    annotationProcessor 'io.github.openfeign.querydsl:querydsl-apt:6.10.1:jakarta'
+    annotationProcessor 'jakarta.annotation:jakarta.annotation-api'
+    annotationProcessor 'jakarta.persistence:jakarta.persistence-api'
+
+    implementation 'io.github.cdimascio:dotenv-java:3.0.0'
+    runtimeOnly 'com.h2database:h2'
+
+
+
+
+    // 레거시 관련 코드 주석처리 (JSP, Mybatis)
+    // implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:3.0.3'
+    // implementation 'org.apache.tomcat.embed:tomcat-embed-jasper'
+    // implementation 'jakarta.servlet:jakarta.servlet-api'
+    // implementation 'jakarta.servlet.jsp.jstl:jakarta.servlet.jsp.jstl-api'
+    // implementation 'org.glassfish.web:jakarta.servlet.jsp.jstl'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
+
